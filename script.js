@@ -32,6 +32,7 @@ border-radius:12px;
 
     let selectSvgs = [];
     const ShapeClass = Parse.Object.extend("shape");
+    const CategoryClass =  Parse.Object.extend("shapeCategory");
 
     const findHighestZIndex = function()
     {
@@ -55,9 +56,6 @@ border-radius:12px;
 </form>
 `)
 
-
-
-
         container.html('');
         form.appendTo(container);
 
@@ -65,19 +63,56 @@ border-radius:12px;
              e.preventDefault();
 
                try{
-                   const category = form.find(`[name="category"]`).val();
-                   const tag = form.find(`[name="tag"]`).val();
-                   selectSvgs.forEach(async span=>{
-                       var shape = new ShapeClass();
-                       shape.set('category',category);
-                       shape.set('tag',tag);
-                       shape.set('svgPath',$(span).find('svg path').attr('d'));
-                       shape.set('name',$(span).find('.svg-shape-name').val());
+                   const categories = form.find(`[name="category"]`).val().split(',');
+                   const tag = form.find(`[name="tag"]`).val().split(',');
+                   const categoryQuery =  new Parse.Query(CategoryClass);
 
-                       await shape.save();
-                  })
+                   let categoryList = [];
+                   let shapeList = [];
 
-                   alert('success');
+                   let saveCategories = ()=>{
+                       return  categories.map(categoryItem =>{
+                           let categoryName = categoryItem;
+
+                           return new Promise(async (resolve,reject)=>{
+                               categoryQuery.equalTo("name",categoryName);
+                               var categoryModel = await categoryQuery.first();
+
+                               if(!categoryModel){
+                                   categoryModel = new CategoryClass();
+                                   categoryModel.set('name',categoryName);
+                               }
+
+                               await categoryModel.save();
+                               categoryList.push(categoryModel);
+                               resolve(categoryModel);
+                           })
+                       })
+                   };
+
+                   let saveShapes =()=>{
+                       return selectSvgs.map(svg => {
+                           return new Promise(async (resolve, reject)=>{
+                               var shape = new ShapeClass();
+                               shape.set('category',categoryList);
+                               shape.set('tag',tag);
+                               shape.set('svgPath',$(svg).find('svg path').attr('d'));
+                               shape.set('name',$(svg).find('.svg-shape-name').val());
+
+                               await shape.save();
+                               shapeList.push(shape);
+                               resolve(shape);
+                           });
+                       })
+                   }
+
+                   Promise.all(saveCategories()).then(()=>{
+                       Promise.all(saveShapes())
+                           .then(()=>{
+                           alert(`Finish to add ${shapeList.length} items !`);
+                       })
+                   })
+
                }catch(error){
                     console.error(error);
                }
@@ -129,7 +164,16 @@ border-radius:12px;
     }
 
     const handleSelectSvg = function(event){
+        var exists = selectSvgs.find(item=>{
+            return $(item).attr('p-id') === $(event.delegateTarget).attr('p-id')
+        });
+
+        if(exists){
+            selectSvgs.pop(exists);
+        }else{
         selectSvgs.push(event.delegateTarget);
+        }
+        
         onSelectSvgChanges();
     }
 
@@ -149,7 +193,7 @@ border-radius:12px;
 
 
                    var item = $(`<span class="svg-check" p-id="${pId}" icon-name="${iconName}" style="cursor:pointer;width:80px;height:40px;margin-right:12px;margin-bottom:12px;display:inline-block;padding:12px 12px 32px 12px"></span>`);
-                   item.append(svg)
+                   item.append($(svg).clone())
                    item.append($(`<center><input class="svg-shape-name" type="text" style="width:100%;" value="${iconName}"></input></center>`))
                    item.appendTo(list)
 
